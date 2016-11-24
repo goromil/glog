@@ -1,4 +1,6 @@
+build*/
 autom4te.cache
 glog-*.tar.gz
 packages/rpm-unknown
 packages/debian-*
+.vscode/

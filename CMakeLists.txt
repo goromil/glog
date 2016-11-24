@@ -28,6 +28,7 @@ set (CPACK_PACKAGE_VERSION ${GLOG_VERSION})
 
 option (WITH_GFLAGS "Use gflags" ON)
 option (WITH_THREADS "Enable multithreading support" ON)
+#option (BUILD_SHARED_LIBS "Build shared library too" ON)
 
 list (APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -338,6 +339,16 @@ configure_file (src/glog/vlog_is_on.h.in glog/vlog_is_on.h @ONLY)
 
 set (CMAKE_CXX_VISIBILITY_PRESET default)
 set (CMAKE_VISIBILITY_INLINES_HIDDEN 1)
+
+set(glog_SHARED_LIBRARY libglog)
+
+if(MSVC)
+GENERATE_EXPORT_HEADER(${glog_SHARED_LIBRARY}           
+    BASE_NAME libglog
+    EXPORT_MACRO_NAME ${glog_SHARED_LIBRARY}_EXPORTS
+    EXPORT_FILE_NAME ${glog_SHARED_LIBRARY}_exports.h
+    STATIC_DEFINE SHARED_EXPORTS_BUILT_AS_STATIC)
+endif()
 
 set (GLOG_PUBLIC_H
   ${CMAKE_CURRENT_BINARY_DIR}/config.h
