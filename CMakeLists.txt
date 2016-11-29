@@ -28,7 +28,7 @@ set (CPACK_PACKAGE_VERSION ${GLOG_VERSION})
 
 option (WITH_GFLAGS "Use gflags" ON)
 option (WITH_THREADS "Enable multithreading support" ON)
-#option (BUILD_SHARED_LIBS "Build shared library too" ON)
+option (BUILD_SHARED_LIBS "Build glog as shared library" ON)
 
 list (APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -42,6 +42,7 @@ include (CheckLibraryExists)
 include (CheckStructHasMember)
 include (CheckSymbolExists)
 include (CheckTypeSize)
+include (GenerateExportHeader)
 include (CMakePackageConfigHelpers)
 include (CPack)
 include (CTest)
@@ -340,16 +341,6 @@ configure_file (src/glog/vlog_is_on.h.in glog/vlog_is_on.h @ONLY)
 set (CMAKE_CXX_VISIBILITY_PRESET default)
 set (CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 
-set(glog_SHARED_LIBRARY libglog)
-
-if(MSVC)
-GENERATE_EXPORT_HEADER(${glog_SHARED_LIBRARY}           
-    BASE_NAME libglog
-    EXPORT_MACRO_NAME ${glog_SHARED_LIBRARY}_EXPORTS
-    EXPORT_FILE_NAME ${glog_SHARED_LIBRARY}_exports.h
-    STATIC_DEFINE SHARED_EXPORTS_BUILT_AS_STATIC)
-endif()
-
 set (GLOG_PUBLIC_H
   ${CMAKE_CURRENT_BINARY_DIR}/config.h
   ${CMAKE_CURRENT_BINARY_DIR}/glog/logging.h
@@ -388,18 +379,27 @@ endif (WIN32)
 
 add_compile_options ($<$<BOOL:${HAVE_NO_UNNAMED_TYPE_TEMPLATE_ARGS}>:-Wno-unnamed-type-template-args>)
 
-add_library (glog
+set (glog_LIBNAME glog)
+add_library (${glog_LIBNAME}
   ${GLOG_SRCS}
 )
 
-set_target_properties (glog PROPERTIES POSITION_INDEPENDENT_CODE ON)
+GENERATE_EXPORT_HEADER(${glog_LIBNAME}           
+    BASE_NAME glog
+    EXPORT_MACRO_NAME GLOG_EXPORTS
+    EXPORT_FILE_NAME glog/${glog_LIBNAME}_exports.h
+    STATIC_DEFINE SHARED_EXPORTS_BUILT_AS_STATIC)
+
+list (APPEND GLOG_PUBLIC_H "${CMAKE_CURRENT_BINARY_DIR}/glog/${glog_LIBNAME}_exports.h")
+
+set_target_properties (${glog_LIBNAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if (UNWIND_LIBRARY)
-  target_link_libraries (glog PUBLIC ${UNWIND_LIBRARY})
+  target_link_libraries (${glog_LIBNAME} PUBLIC ${UNWIND_LIBRARY})
 endif (UNWIND_LIBRARY)
 
 if (HAVE_PTHREAD)
-  target_link_libraries (glog PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries (${glog_LIBNAME} PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 endif (HAVE_PTHREAD)
 
 if (WIN32 AND HAVE_SNPRINTF)
@@ -408,25 +408,29 @@ if (WIN32 AND HAVE_SNPRINTF)
 endif (WIN32 AND HAVE_SNPRINTF)
 
 if (gflags_FOUND)
-  target_include_directories (glog PUBLIC $<BUILD_INTERFACE:${gflags_INCLUDE_DIR}>)
-  target_link_libraries (glog PUBLIC ${gflags_LIBRARIES})
+  target_include_directories (${glog_LIBNAME} PUBLIC $<BUILD_INTERFACE:${gflags_INCLUDE_DIR}>)
+  target_link_libraries (${glog_LIBNAME} PUBLIC ${gflags_LIBRARIES})
 
   if (NOT BUILD_SHARED_LIBS)
     # Don't use __declspec(dllexport|dllimport) if this is a static build
-    targeT_compile_definitions (glog PUBLIC GFLAGS_DLL_DECLARE_FLAG= GFLAGS_DLL_DEFINE_FLAG=)
+    targeT_compile_definitions (${glog_LIBNAME} PUBLIC GFLAGS_DLL_DECLARE_FLAG= GFLAGS_DLL_DEFINE_FLAG=)
   endif (NOT BUILD_SHARED_LIBS)
 endif (gflags_FOUND)
 
-set_target_properties (glog PROPERTIES VERSION ${GLOG_MAJOR_VERSION})
-set_target_properties (glog PROPERTIES SOVERSION ${GLOG_VERSION})
+set_target_properties (${glog_LIBNAME} PROPERTIES VERSION ${GLOG_MAJOR_VERSION})
+set_target_properties (${glog_LIBNAME} PROPERTIES SOVERSION ${GLOG_VERSION})
+
+if(MSVC)
+  set_target_properties (${glog_LIBNAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE) 
+endif()
 
 if (WIN32)
-  target_compile_definitions (glog PUBLIC GLOG_NO_ABBREVIATED_SEVERITIES)
+  target_compile_definitions (${glog_LIBNAME} PUBLIC GLOG_NO_ABBREVIATED_SEVERITIES)
 endif (WIN32)
 
-set_target_properties (glog PROPERTIES PUBLIC_HEADER "${GLOG_PUBLIC_H}")
+set_target_properties (${glog_LIBNAME} PROPERTIES PUBLIC_HEADER "${GLOG_PUBLIC_H}")
 
-target_include_directories (glog BEFORE PUBLIC
+target_include_directories (${glog_LIBNAME} BEFORE PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
   "$<INSTALL_INTERFACE:include>"
@@ -434,17 +438,17 @@ target_include_directories (glog BEFORE PUBLIC
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if (WIN32)
-  target_include_directories (glog PUBLIC
+  target_include_directories (${glog_LIBNAME} PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/windows>"
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/windows)
 endif (WIN32)
 
-set_target_properties (glog PROPERTIES DEFINE_SYMBOL LIBGLOG_EXPORTS)
+set_target_properties (${glog_LIBNAME} PROPERTIES DEFINE_SYMBOL LIBGLOG_EXPORTS)
 
 if (NOT BUILD_SHARED_LIBS)
-  target_compile_definitions (glog PUBLIC GOOGLE_GLOG_DLL_DECL=)
+  target_compile_definitions (${glog_LIBNAME} PUBLIC GOOGLE_GLOG_DLL_DECL=)
 else (NOT BUILD_SHARED_LIBS)
-  target_compile_definitions (glog PRIVATE GOOGLE_GLOG_IS_A_DLL=1)
+  target_compile_definitions (${glog_LIBNAME} PRIVATE GOOGLE_GLOG_IS_A_DLL=1)
 
   if (HAVE___ATTRIBUTE__VISIBILITY_DEFAULT)
     set (_EXPORT "__attribute__((visibility(\"default\")))")
@@ -454,11 +458,11 @@ else (NOT BUILD_SHARED_LIBS)
     set (_IMPORT "__declspec(dllimport)")
   endif (HAVE___ATTRIBUTE__VISIBILITY_DEFAULT)
 
-  target_compile_definitions (glog PRIVATE
+  target_compile_definitions (${glog_LIBNAME} PRIVATE
     "GOOGLE_GLOG_DLL_DECL=${_EXPORT}")
-  target_compile_definitions (glog INTERFACE
+  target_compile_definitions (${glog_LIBNAME} INTERFACE
     "GOOGLE_GLOG_DLL_DECL=${_IMPORT}")
-  target_compile_definitions (glog INTERFACE
+  target_compile_definitions (${glog_LIBNAME} INTERFACE
     "GOOGLE_GLOG_DLL_DECL_FOR_UNITTESTS=${_IMPORT}")
 endif (NOT BUILD_SHARED_LIBS)
 
@@ -477,13 +481,13 @@ if (BUILD_TESTING)
     src/logging_unittest.cc
   )
 
-  target_link_libraries (logging_unittest PRIVATE glog)
+  target_link_libraries (logging_unittest PRIVATE ${glog_LIBNAME})
 
   add_executable (stl_logging_unittest
     src/stl_logging_unittest.cc
   )
 
-  target_link_libraries (stl_logging_unittest PRIVATE glog)
+  target_link_libraries (stl_logging_unittest PRIVATE ${glog_LIBNAME})
 
   if (HAVE_NO_DEPRECATED)
     set_property (TARGET stl_logging_unittest APPEND PROPERTY COMPILE_OPTIONS
@@ -515,35 +519,35 @@ if (BUILD_TESTING)
       src/symbolize_unittest.cc
     )
 
-    target_link_libraries (symbolize_unittest PRIVATE glog)
+    target_link_libraries (symbolize_unittest PRIVATE ${glog_LIBNAME})
   endif (HAVE_SYMBOLIZE)
 
   add_executable (demangle_unittest
     src/demangle_unittest.cc
   )
 
-  target_link_libraries (demangle_unittest PRIVATE glog)
+  target_link_libraries (demangle_unittest PRIVATE ${glog_LIBNAME})
 
   if (HAVE_STACKTRACE)
     add_executable (stacktrace_unittest
       src/stacktrace_unittest.cc
     )
 
-    target_link_libraries (stacktrace_unittest PRIVATE glog)
+    target_link_libraries (stacktrace_unittest PRIVATE ${glog_LIBNAME})
   endif (HAVE_STACKTRACE)
 
   add_executable (utilities_unittest
     src/utilities_unittest.cc
   )
 
-  target_link_libraries (utilities_unittest PRIVATE glog)
+  target_link_libraries (utilities_unittest PRIVATE ${glog_LIBNAME})
 
   if (HAVE_STACKTRACE AND HAVE_SYMBOLIZE)
     add_executable (signalhandler_unittest
       src/signalhandler_unittest.cc
     )
 
-    target_link_libraries (signalhandler_unittest PRIVATE glog)
+    target_link_libraries (signalhandler_unittest PRIVATE ${glog_LIBNAME})
   endif (HAVE_STACKTRACE AND HAVE_SYMBOLIZE)
 
   add_test (NAME demangle COMMAND demangle_unittest)
@@ -564,10 +568,10 @@ if (BUILD_TESTING)
   endif (TARGET symbolize_unittest)
 endif (BUILD_TESTING)
 
-install (TARGETS glog
-  EXPORT glog-targets
+install (TARGETS ${glog_LIBNAME}
+  EXPORT ${glog_LIBNAME}-targets
   RUNTIME DESTINATION bin
-  PUBLIC_HEADER DESTINATION include/glog
+  PUBLIC_HEADER DESTINATION include/${glog_LIBNAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib)
 
@@ -576,19 +580,19 @@ if (gflags_FOUND)
 endif (gflags_FOUND)
 
 configure_package_config_file (glog-config.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/glog-config.cmake
-  INSTALL_DESTINATION lib/cmake/glog
+  ${CMAKE_CURRENT_BINARY_DIR}/${glog_LIBNAME}-config.cmake
+  INSTALL_DESTINATION lib/cmake/${glog_LIBNAME}
   NO_CHECK_REQUIRED_COMPONENTS_MACRO)
 
-write_basic_package_version_file (glog-config-version.cmake VERSION
+write_basic_package_version_file (${glog_LIBNAME}-config-version.cmake VERSION
   ${GLOG_VERSION} COMPATIBILITY SameMajorVersion)
 
-export (TARGETS glog NAMESPACE glog:: FILE glog-targets.cmake)
-export (PACKAGE glog)
+export (TARGETS ${glog_LIBNAME} NAMESPACE ${glog_LIBNAME}:: FILE ${glog_LIBNAME}-targets.cmake)
+export (PACKAGE ${glog_LIBNAME})
 
 install (FILES
-  ${CMAKE_CURRENT_BINARY_DIR}/glog-config.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/glog-config-version.cmake
-  DESTINATION lib/cmake/glog)
+  ${CMAKE_CURRENT_BINARY_DIR}/${glog_LIBNAME}-config.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/${glog_LIBNAME}-config-version.cmake
+  DESTINATION lib/cmake/${glog_LIBNAME})
 
-install (EXPORT glog-targets NAMESPACE glog:: DESTINATION lib/cmake/glog)
+install (EXPORT ${glog_LIBNAME}-targets NAMESPACE ${glog_LIBNAME}:: DESTINATION lib/cmake/${glog_LIBNAME})
