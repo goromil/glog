@@ -4,3 +4,4 @@ glog-*.tar.gz
 packages/rpm-unknown
 packages/debian-*
 .vscode/
+cmake-msvc-14.bat
